@@ -1,0 +1,5 @@
+fastapi
+uvicorn
+aiortc
+opencv-python
+aiohttp

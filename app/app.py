@@ -203,6 +203,148 @@ html = """
 </html>
 """
 
+html2 = """
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WebRTC webcam</title>
+    <style>
+        button {
+            padding: 8px 16px;
+        }
+
+        video {
+            width: 100%;
+        }
+
+        .option {
+            margin-bottom: 8px;
+        }
+
+        #media {
+            max-width: 1280px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="option">
+        <input id="use-stun" type="checkbox" />
+        <label for="use-stun">Use STUN server</label>
+    </div>
+    <button id="start" onclick="start()">Start</button>
+    <button id="stop" style="display: none" onclick="stop()">Stop</button>
+
+    <div id="media">
+        <h2>Media</h2>
+
+        <audio id="audio" autoplay="true"></audio>
+        <video id="video" autoplay="true" playsinline="true"></video>
+    </div>
+
+    <script>
+        var pc = null;
+
+        function negotiate() {
+            pc.addTransceiver('video', { direction: 'recvonly' });
+            pc.addTransceiver('audio', { direction: 'recvonly' });
+            return pc.createOffer().then((offer) => {
+                return pc.setLocalDescription(offer);
+            }).then(() => {
+                // wait for ICE gathering to complete
+                return new Promise((resolve) => {
+                    if (pc.iceGatheringState === 'complete') {
+                        resolve();
+                    } else {
+                        const checkState = () => {
+                            if (pc.iceGatheringState === 'complete') {
+                                pc.removeEventListener('icegatheringstatechange', checkState);
+                                resolve();
+                            }
+                        };
+                        pc.addEventListener('icegatheringstatechange', checkState);
+                    }
+                });
+            }).then(() => {
+                var offer = pc.localDescription;
+                return fetch('/offer?cam_id=6789', {
+                    body: JSON.stringify({
+                        sdp: offer.sdp,
+                        type: offer.type,
+                    }),
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    method: 'POST'
+                });
+            }).then((response) => {
+                console.log("response -", response)
+                return response.json();
+            }).then((answer) => {
+                console.log("answer -", answer)
+                return pc.setRemoteDescription(answer);
+            }).catch((e) => {
+                alert(e);
+            });
+        }
+
+        function start() {
+            var config = {
+                sdpSemantics: 'unified-plan'
+            };
+
+            if (document.getElementById('use-stun').checked) {
+                config.iceServers = [{ urls: ['stun:stun.l.google.com:19302'] }];
+            }
+
+            pc = new RTCPeerConnection(config);
+
+            console.log("pre pc -", pc);
+
+            // connect audio / video
+            pc.addEventListener('track', (evt) => {
+                console.log("get evt -",evt);
+                if (evt.track.kind == 'video') {
+                    document.getElementById('video').srcObject = evt.streams[0];
+                } else {
+                    document.getElementById('audio').srcObject = evt.streams[0];
+                }
+            });
+
+            document.getElementById('start').style.display = 'none';
+            negotiate();
+            console.log("negotiation done");
+            console.log("pc -", pc);
+            // pc.addEventListener('track', (evt) => {
+            //     console.log("pc -", pc);
+            //     console.log("get evt -",evt);
+            //     if (evt.track.kind == 'video') {
+            //         document.getElementById('video').srcObject = evt.streams[0];
+            //     } else {
+            //         document.getElementById('audio').srcObject = evt.streams[0];
+            //     }
+            // });
+            document.getElementById('stop').style.display = 'inline-block';
+        }
+
+        function stop() {
+            document.getElementById('stop').style.display = 'none';
+
+            // close peer connection
+            setTimeout(() => {
+                pc.close();
+            }, 500);
+        }
+    </script>
+</body>
+
+</html>
+"""
+
 relay = None
 webcam = None
 
@@ -301,6 +443,14 @@ async def get():
     # print(content)
     # return HTMLResponse(content=content)
     return HTMLResponse(html)
+    # return web.Response(content_type="text/html", text=content)
+
+@app.get("/789")
+async def get():
+    # content = open(os.path.join(ROOT, "index.html"), "r").read()
+    # print(content)
+    # return HTMLResponse(content=content)
+    return HTMLResponse(html2)
     # return web.Response(content_type="text/html", text=content)
 
 
